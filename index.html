@@ -1378,7 +1378,20 @@ function setAllAttendance(date,subId,val){
     }
   });
 }
-function saveAttendance(){ updateAlertBadge(); showToast('✅ บันทึกการเช็คชื่อเรียบร้อย'); }
+function saveAttendance(){
+  const roomId=document.getElementById('ci-level').value;
+  const subId=document.getElementById('ci-subject').value;
+  const date=document.getElementById('ci-date').value||todayStr();
+  const stus=studentsForSubjectRoom(subId,roomId);
+  const records=stus.map(st=>({
+    date, subjectId:subId, studentId:st.id,
+    status:store.attendance[`${date}_${subId}_${st.id}`]||'present'
+  }));
+  showToast('💾 กำลังบันทึก...');
+  gasCall('saveAttendance',{records})
+    .then(()=>{ updateAlertBadge(); showToast('✅ บันทึกการเช็คชื่อเรียบร้อย'); })
+    .catch(e=>showToast('⚠️ บันทึกไม่สำเร็จ: '+e.message));
+}
 
 // ═══════════════════════════════════ SUMMARY ═══
 function initSummary(){
@@ -1633,23 +1646,25 @@ function saveStudent(){
   const num=parseInt(document.getElementById('stu-num').value)||1;
   const gender=document.getElementById('stu-gender').value;
   if(!name){alert('กรุณากรอกชื่อนักเรียน');return;}
-  store.students.push({id:'st'+Date.now(),name,room,num,gender,subjects:[...stuTagsTemp]});
-  stuTagsTemp=[];
-  document.getElementById('stu-tags').innerHTML='';
-  closeModal('modal-addstudent');
-  renderStudentTable();
-  populateLevelSelects();
-  showToast('✅ เพิ่มนักเรียนเรียบร้อย');
+  const data={name,room,num,gender,subjects:[...stuTagsTemp]};
+  gasCall('addStudent',data).then(added=>{
+    store.students.push(added);
+    stuTagsTemp=[];
+    document.getElementById('stu-tags').innerHTML='';
+    closeModal('modal-addstudent');
+    renderStudentTable(); populateLevelSelects();
+    showToast('✅ เพิ่มนักเรียนเรียบร้อย');
+  }).catch(e=>showToast('⚠️ บันทึกไม่สำเร็จ: '+e.message));
 }
 function addRoom(){
   const name=document.getElementById('room-name').value.trim();
   if(!name) return;
-  store.rooms.push({id:'r'+Date.now(),name});
-  closeModal('modal-addroom');
-  renderRoomsTable();
-  populateLevelSelects();
-  populateManageSelects();
-  showToast('✅ สร้างห้องเรียนเรียบร้อย');
+  gasCall('addRoom',{name}).then(added=>{
+    store.rooms.push(added);
+    closeModal('modal-addroom');
+    renderRoomsTable(); populateLevelSelects(); populateManageSelects();
+    showToast('✅ สร้างห้องเรียนเรียบร้อย');
+  }).catch(e=>showToast('⚠️ บันทึกไม่สำเร็จ: '+e.message));
 }
 function saveSubject(){
   const code=document.getElementById('subj-code').value.trim();
@@ -1657,28 +1672,34 @@ function saveSubject(){
   const roomVal=document.getElementById('subj-rooms').value;
   const rooms=roomVal?[roomVal]:[];
   if(!name){alert('กรุณากรอกชื่อวิชา');return;}
-  store.subjects.push({id:'s'+Date.now(),code:code||'—',name,rooms});
-  closeModal('modal-addsubject');
-  renderSubjectsTable();
-  populateLevelSelects();
-  populateManageSelects();
-  showToast('✅ เพิ่มวิชาเรียบร้อย');
+  gasCall('addSubject',{code:code||'—',name,rooms}).then(added=>{
+    store.subjects.push(added);
+    closeModal('modal-addsubject');
+    renderSubjectsTable(); populateLevelSelects(); populateManageSelects();
+    showToast('✅ เพิ่มวิชาเรียบร้อย');
+  }).catch(e=>showToast('⚠️ บันทึกไม่สำเร็จ: '+e.message));
 }
 function deleteRoom(id){
   if(!confirm('ลบห้องเรียนนี้?')) return;
-  store.rooms=store.rooms.filter(r=>r.id!==id);
-  renderRoomsTable();populateLevelSelects();populateManageSelects();
-  showToast('🗑 ลบห้องเรียนแล้ว');
+  gasCall('deleteRoom',{id}).then(()=>{
+    store.rooms=store.rooms.filter(r=>r.id!==id);
+    renderRoomsTable(); populateLevelSelects(); populateManageSelects();
+    showToast('🗑 ลบห้องเรียนแล้ว');
+  }).catch(e=>showToast('⚠️ ลบไม่สำเร็จ: '+e.message));
 }
 function deleteStudent(id){
   if(!confirm('ลบนักเรียนนี้?')) return;
-  store.students=store.students.filter(s=>s.id!==id);
-  renderStudentTable();showToast('🗑 ลบนักเรียนแล้ว');
+  gasCall('deleteStudent',{id}).then(()=>{
+    store.students=store.students.filter(s=>s.id!==id);
+    renderStudentTable(); showToast('🗑 ลบนักเรียนแล้ว');
+  }).catch(e=>showToast('⚠️ ลบไม่สำเร็จ: '+e.message));
 }
 function deleteSubject(id){
   if(!confirm('ลบวิชานี้?')) return;
-  store.subjects=store.subjects.filter(s=>s.id!==id);
-  renderSubjectsTable();populateManageSelects();showToast('🗑 ลบวิชาแล้ว');
+  gasCall('deleteSubject',{id}).then(()=>{
+    store.subjects=store.subjects.filter(s=>s.id!==id);
+    renderSubjectsTable(); populateManageSelects(); showToast('🗑 ลบวิชาแล้ว');
+  }).catch(e=>showToast('⚠️ ลบไม่สำเร็จ: '+e.message));
 }
 
 // ─── CHECKBOX / BULK DELETE ───────────────────────────────
@@ -1713,9 +1734,11 @@ function bulkDeleteStudents(){
   const ids=[...document.querySelectorAll('.stu-cb:checked')].map(c=>c.value);
   if(!ids.length) return;
   if(!confirm(`ลบนักเรียน ${ids.length} คนนี้?`)) return;
-  store.students=store.students.filter(s=>!ids.includes(s.id));
-  renderStudentTable(); populateLevelSelects();
-  showToast(`🗑 ลบ ${ids.length} คนเรียบร้อย`);
+  Promise.all(ids.map(id=>gasCall('deleteStudent',{id}))).then(()=>{
+    store.students=store.students.filter(s=>!ids.includes(s.id));
+    renderStudentTable(); populateLevelSelects();
+    showToast(`🗑 ลบ ${ids.length} คนเรียบร้อย`);
+  }).catch(e=>showToast('⚠️ ลบไม่สำเร็จ: '+e.message));
 }
 
 function updateSubjBulkBar(){
@@ -1741,9 +1764,11 @@ function bulkDeleteSubjects(){
   const ids=[...document.querySelectorAll('.subj-cb:checked')].map(c=>c.value);
   if(!ids.length) return;
   if(!confirm(`ลบ ${ids.length} วิชานี้?`)) return;
-  store.subjects=store.subjects.filter(s=>!ids.includes(s.id));
-  renderSubjectsTable(); populateManageSelects(); populateLevelSelects();
-  showToast(`🗑 ลบ ${ids.length} วิชาเรียบร้อย`);
+  Promise.all(ids.map(id=>gasCall('deleteSubject',{id}))).then(()=>{
+    store.subjects=store.subjects.filter(s=>!ids.includes(s.id));
+    renderSubjectsTable(); populateManageSelects(); populateLevelSelects();
+    showToast(`🗑 ลบ ${ids.length} วิชาเรียบร้อย`);
+  }).catch(e=>showToast('⚠️ ลบไม่สำเร็จ: '+e.message));
 }
 
 // ─── EDIT STUDENT ─────────────────────────────────────────
@@ -1793,10 +1818,11 @@ function updateStudent(){
   st.num=parseInt(document.getElementById('edit-stu-num').value)||st.num;
   st.gender=document.getElementById('edit-stu-gender').value;
   st.subjects=[...editStuTagsTemp];
-  gasCall('updateStudent',{id,name:st.name,room:st.room,num:st.num,gender:st.gender,subjects:st.subjects}).catch(e=>console.warn('sync:',e));
+  gasCall('updateStudent',{id,name:st.name,room:st.room,num:st.num,gender:st.gender,subjects:st.subjects})
+    .then(()=>showToast('✅ แก้ไขข้อมูลนักเรียนเรียบร้อย'))
+    .catch(e=>showToast('⚠️ บันทึกไม่สำเร็จ: '+e.message));
   closeModal('modal-editstudent');
   renderStudentTable(); populateLevelSelects();
-  showToast('✅ แก้ไขข้อมูลนักเรียนเรียบร้อย');
 }
 
 // ─── EDIT SUBJECT ─────────────────────────────────────────
@@ -1822,37 +1848,45 @@ function updateSubject(){
   sub.name=name;
   const editRoomVal=document.getElementById('edit-subj-rooms').value;
   sub.rooms=editRoomVal?[editRoomVal]:[];
-  gasCall('updateSubject',{id,code:sub.code,name:sub.name,rooms:sub.rooms}).catch(e=>console.warn('sync:',e));
+  gasCall('updateSubject',{id,code:sub.code,name:sub.name,rooms:sub.rooms})
+    .then(()=>showToast('✅ แก้ไขวิชาเรียบร้อย'))
+    .catch(e=>showToast('⚠️ บันทึกไม่สำเร็จ: '+e.message));
   closeModal('modal-editsubject');
   renderSubjectsTable(); populateLevelSelects(); populateManageSelects();
-  showToast('✅ แก้ไขวิชาเรียบร้อย');
 }
 
 function importCSV(){
   const file=document.getElementById('xls-file').files[0];
   if(!file){alert('กรุณาเลือกไฟล์');return;}
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     const lines=e.target.result.split('\n').slice(1).filter(l=>l.trim());
-    let count=0;
-    lines.forEach(line=>{
+    const rows=[];
+    for(const line of lines){
       const cols=line.split(',');
-      if(cols.length<4) return;
+      if(cols.length<4) continue;
       const name=(cols[0]||'').trim();
       const roomName=(cols[1]||'').trim();
       const num=parseInt(cols[2])||1;
       const gender=(cols[3]||'ชาย').trim();
       const subNames=(cols[4]||'').trim().split('|').map(s=>s.trim()).filter(Boolean);
-      if(!name) return;
+      if(!name) continue;
       let room=store.rooms.find(r=>r.name===roomName);
-      if(!room){room={id:'r'+Date.now()+Math.random(),name:roomName};store.rooms.push(room);}
+      if(!room){
+        try{ room=await gasCall('addRoom',{name:roomName}); store.rooms.push(room); }
+        catch{ room={id:'r'+Date.now(),name:roomName}; store.rooms.push(room); }
+      }
       const subjects=subNames.map(sn=>store.subjects.find(s=>s.name===sn)).filter(Boolean).map(s=>s.id);
-      store.students.push({id:'st'+Date.now()+Math.random(),name,room:room.id,num,gender,subjects});
-      count++;
-    });
-    closeModal('modal-importxls');
-    renderStudentTable();renderRoomsTable();populateLevelSelects();populateManageSelects();
-    showToast(`✅ นำเข้า ${count} คนเรียบร้อย`);
+      rows.push({name,room:room.id,num,gender,subjects});
+    }
+    if(!rows.length){showToast('⚠️ ไม่พบข้อมูล');return;}
+    try{
+      const added=await Promise.all(rows.map(r=>gasCall('addStudent',r)));
+      added.forEach(s=>store.students.push(s));
+      closeModal('modal-importxls');
+      renderStudentTable();renderRoomsTable();populateLevelSelects();populateManageSelects();
+      showToast(`✅ นำเข้า ${added.length} คนเรียบร้อย`);
+    }catch(e){showToast('⚠️ นำเข้าไม่สำเร็จ: '+e.message);}
   };
   reader.readAsText(file,'UTF-8');
 }
