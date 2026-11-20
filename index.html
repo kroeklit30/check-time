@@ -2605,7 +2605,15 @@ function seedSavings(){ /* ข้อมูลจำลองถูกลบอ�
 //  Netlify + GAS API layer
 //  วาง URL ของ GAS Web App ที่ Deploy แล้วตรงนี้
 // =========================================================
-const GAS_URL = 'https://script.google.com/macros/s/AKfycby2xmhYJt4x9ye7x4YkB6YvHM3dWgkmRR2xEFGx5zh4flgamxaoXe_Poig8CMcZDX4/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxMyJWr86SQ89mU7ZNzAr_VfoWr3ndUkKpXgdDCLVxfHbVWm0Q-fWlieoX4YSxbMDXy/exec';
+
+// GET = โหลดข้อมูล, POST = บันทึก (เหมือน Assignment Tracker ที่ใช้งานได้)
+async function gasGet() {
+  const res = await fetch(GAS_URL, { method: 'GET', redirect: 'follow' });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'GET error');
+  return json.data;
+}
 
 async function gasCall(action, data = {}) {
   if (!GAS_URL || GAS_URL === 'YOUR_GAS_URL_HERE') {
@@ -2617,9 +2625,8 @@ async function gasCall(action, data = {}) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action, data }),
   });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
   const json = await res.json();
-  if (!json.ok) throw new Error(json.msg || 'API error');
+  if (!json.ok) throw new Error(json.error || json.msg || 'API error');
   return json.data;
 }
 
@@ -2638,7 +2645,7 @@ function showLoadingOverlay(show) {
 async function loadFromSheets() {
   showLoadingOverlay(true);
   try {
-    const d = await gasCall('init');
+    const d = await gasGet();
     store.rooms    = d.rooms    || [];
     store.subjects = d.subjects || [];
     store.students = d.students || [];
